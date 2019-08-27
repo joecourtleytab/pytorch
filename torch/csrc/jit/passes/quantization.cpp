@@ -11,6 +11,10 @@ namespace torch {
 namespace jit {
 namespace {
 
+static bool outputsNeedToBeObserved(Node* n) {
+  return n->kind() != prim::Constant;
+}
+
 Node* traverseToQuantNode(Node* dq) {
   TORCH_INTERNAL_ASSERT(dq != nullptr);
   TORCH_INTERNAL_ASSERT(dq->inputs().size() != 0);
@@ -55,11 +59,36 @@ Node* createIntReprNode(Value* v, Graph* g) {
   return intrepr;
 }
 
+// forward decl for InsertObserversImpl
+void InsertObserversImpl(
+    script::Module& module,
+    const std::string& method_name,
+    const ModuleQConfigMap& module_qconfig_map);
+
 // Clone observer module and add it to the original module,
 // and insert a call to observer forward function
-Node* insertObserverForwardCall(Value* v, Graph* g,
-                                script::Module module,
-                                const script::Module& observer_module) {
+Node* insertObserver(Value* v, Graph* g,
+                     script::Module& module,
+                     const ModuleQConfigMap& module_qconfig_map) {
+  if (v->node()->kind() == prim::CallMethod && v->node()->s(attr::name) == "forward") {
+    auto child_instance = v->node()->inputs()[0];
+    TORCH_INTERNAL_ASSERT(child_instance->node()->kind() == prim::GetAttr, "Child instance should come from GetAttr.");
+    auto child_module_name = child_instance->node()->s(attr::name);
+    auto child_module = module.find_module(child_module_name);
+    TORCH_INTERNAL_ASSERT(child_module, "Child module " + child_module_name + " does not exist");
+    InsertObserversImpl(child_module.value(), "forward", module_qconfig_map);
+  }
+  auto qconfig = module_qconfig_map.at(module.module_object());
+  // Skip to insert observer if no qconfig is specified
+  if (!qconfig) {
+    return nullptr;
+  }
+  script::Module observer_module;
+  if (v->node()->kind() == prim::GetAttr && v->node()->s(attr::name) == "weight") {
+    std::tie(std::ignore, observer_module) = qconfig.value();
+  } else {
+    std::tie(observer_module, std::ignore) = qconfig.value();
+  }
   std::string observer_name = "observer_for_" + v->debugName();
   script::Module observer = observer_module.clone();
   module.register_module(observer_name, observer);
@@ -84,30 +113,43 @@ Node* insertObserverForwardCall(Value* v, Graph* g,
   return call;
 }
 
-} // namespace
-
-// PyBind APIs
-void PropagateQuantInfo(std::shared_ptr<Graph>& graph) {
-  throw std::runtime_error("Pass not implemented yet!");
+c10::optional<QConfig> getQConfig(const std::string& key, const c10::optional<QConfig>& parent_qconfig, const QConfigDict& qconfig_dict) {
+  if (qconfig_dict.find(key) != qconfig_dict.end()) {
+    return qconfig_dict.at(key);
+  }
+  return parent_qconfig;
 }
 
-static bool outputsNeedToBeObserved(Node* n) {
-  return n->kind() != prim::Constant;
+void getQConfigMapHelper(
+    const script::Module& module,
+    const QConfigDict& qconfig_dict,
+    const std::string& key,
+    c10::optional<QConfig> parent_qconfig,
+    ModuleQConfigMap& map) {
+  auto qconfig = getQConfig(key, parent_qconfig, qconfig_dict);
+  map[module.module_object()] = qconfig;
+  for (script::Slot s: module.get_module_slots()) {
+    std::string child_key;
+    if (key == "") {
+      child_key = s.name();
+    } else {
+      child_key = key + "." + s.name();
+    }
+    getQConfigMapHelper(s.to_module(), qconfig_dict, child_key, qconfig, map);
+  }
 }
 
-void QuantLinting(std::shared_ptr<Graph>& graph) {
-  throw std::runtime_error("Pass not implemented yet!");
+ModuleQConfigMap getQConfigMap(
+    const script::Module& module, const QConfigDict& qconfig_dict) {
+  ModuleQConfigMap map;
+  getQConfigMapHelper(module, qconfig_dict, "", c10::nullopt, map);
+  return map;
 }
 
-void FoldQuantNodesIntoInputsOutputs(std::shared_ptr<Graph>& graph) {
-  throw std::runtime_error("Pass not implemented yet!");
-}
-
-TORCH_API void InsertObservers(
+void InsertObserversImpl(
     script::Module& module,
     const std::string& method_name,
-    const script::Module& observer_module,
-    const script::Module& weight_observer_module) {
+    const ModuleQConfigMap& module_qconfig_map) {
   script::Method method = module.get_method(method_name);
   auto graph = method.graph();
   TORCH_CHECK(graph != nullptr);
@@ -131,8 +173,10 @@ TORCH_API void InsertObservers(
   for (size_t idx = 1; idx < method.num_inputs(); ++idx) {
     auto& v = graph->inputs()[idx];
     if (v->type()->isSubtypeOf(TensorType::get())) {
-      Node* observer_node = insertObserverForwardCall(v, v->owningGraph(), module, observer_module);
-      observer_for_input.emplace(observer_node);
+      auto observer_node = insertObserver(v, v->owningGraph(), module, module_qconfig_map);
+      if (observer_node) {
+        observer_for_input.emplace(observer_node);
+      }
     }
   }
 
@@ -166,13 +210,34 @@ TORCH_API void InsertObservers(
       // Skip inserting observer for bias
       if (v->node()->kind() == prim::GetAttr && v->node()->s(c10::attr::name) == "bias") {
         continue;
-      } else if (v->node()->kind() == prim::GetAttr && v->node()->s(c10::attr::name) == "weight") {
-        insertObserverForwardCall(v, v->owningGraph(), module, weight_observer_module);
       } else {
-        insertObserverForwardCall(v, v->owningGraph(), module, observer_module);
+        insertObserver(v, v->owningGraph(), module, module_qconfig_map);
       }
     }
   }
+}
+
+} // namespace
+
+// PyBind APIs
+void PropagateQuantInfo(std::shared_ptr<Graph>& graph) {
+  throw std::runtime_error("Pass not implemented yet!");
+}
+
+void QuantLinting(std::shared_ptr<Graph>& graph) {
+  throw std::runtime_error("Pass not implemented yet!");
+}
+
+void FoldQuantNodesIntoInputsOutputs(std::shared_ptr<Graph>& graph) {
+  throw std::runtime_error("Pass not implemented yet!");
+}
+
+TORCH_API void InsertObservers(
+    script::Module& module,
+    const std::string& method_name,
+    const QConfigDict& qconfig_dict) {
+  auto module_qconfig_map = getQConfigMap(module, qconfig_dict);
+  InsertObserversImpl(module, method_name, module_qconfig_map);
 }
 
 Node* insertQuantDeQuantCall(Value* v, const IValue& qparams, at::ScalarType t, bool insert_after=true) {
