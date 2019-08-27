@@ -15,12 +15,7 @@ set(CMAKE_INSTALL_RPATH "${_rpath_portable_origin}")
 # the rpath (per library?)
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
- # UBSAN triggers when compiling protobuf, so we need to disable it.
-set(UBSAN_FLAG "-fsanitize=undefined")
-
-macro(disable_ubsan)
-  if (CMAKE_C_FLAGS MATCHES ${UBSAN_FLAG} OR CMAKE_CXX_FLAGS MATCHES ${UBSAN_FLAG})
-    set(CAFFE2_UBSAN_ENABLED ON)
+ # UBSAN triggers when compilin
     string(REPLACE ${UBSAN_FLAG} "" CMAKE_C_FLAGS ${CMAKE_C_FLAGS})
     string(REPLACE ${UBSAN_FLAG} "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
   endif()
@@ -40,12 +35,12 @@ if(CAFFE2_CMAKE_BUILDING_WITH_MAIN_REPO)
   include(${CMAKE_CURRENT_LIST_DIR}/ProtoBuf.cmake)
   enable_ubsan()
 endif()
-endif()
+endif()g protobuf, so we need to disable it.
+set(UBSAN_FLAG "-fsanitize=undefined")
 
-# For MSVC,
-# 1. Replace /Zi and /ZI with /Z7
-# 2. Switch off incremental linking in debug builds
-if (MSVC)
+macro(disable_ubsan)
+  if (CMAKE_C_FLAGS MATCHES ${UBSAN_FLAG} OR CMAKE_CXX_FLAGS MATCHES ${UBSAN_FLAG})
+    set(CAFFE2_UBSAN_ENABLED ON)
   if(MSVC_Z7_OVERRIDE)
     foreach(flag_var
         CMAKE_C_FLAGS CMAKE_C_FLAGS_DEBUG CMAKE_C_FLAGS_RELEASE
@@ -69,10 +64,12 @@ endif(MSVC)
 # ---[ Threads
 include(${CMAKE_CURRENT_LIST_DIR}/public/threads.cmake)
 if (TARGET Threads::Threads)
-  list(APPEND Caffe2_PUBLIC_DEPENDENCY_LIBS Threads::Threads)
-else()
-  message(FATAL_ERROR
-      "Cannot find threading library. Caffe2 requires Threads to compile.")
+  list(APPEND Caffe2_g protobuf, so we need to disable it.
+set(UBSAN_FLAG "-fsanitize=undefined")
+
+macro(disable_ubsan)
+  if (CMAKE_C_FLAGS MATCHES ${UBSAN_FLAG} OR CMAKE_CXX_FLAGS MATCHES ${UBSAN_FLAG})
+    set(CAFFE2_UBSAN_ENABLED ON)eading library. Caffe2 requires Threads to compile.")
 endif()
 
 if (USE_TBB)
@@ -134,14 +131,12 @@ elseif(BLAS STREQUAL "MKL")
   if(MKL_FOUND)
     message(STATUS "MKL libraries: ${MKL_LIBRARIES}")
     message(STATUS "MKL include directory: ${MKL_INCLUDE_DIR}")
-    message(STATUS "MKL OpenMP type: ${MKL_OPENMP_TYPE}")
-    message(STATUS "MKL OpenMP library: ${MKL_OPENMP_LIBRARY}")
-    include_directories(AFTER SYSTEM ${MKL_INCLUDE_DIR})
-    list(APPEND Caffe2_PUBLIC_DEPENDENCY_LIBS caffe2::mkl)
-    set(CAFFE2_USE_MKL ON)
-  else()
-    message(WARNING "MKL could not be found. Defaulting to Eigen")
-    set(BLAS "Eigen" CACHE STRING "Selected BLAS library")
+    message(STATUS g protobuf, so we need to disable it.
+set(UBSAN_FLAG "-fsanitize=undefined")
+
+macro(disable_ubsan)
+  if (CMAKE_C_FLAGS MATCHES ${UBSAN_FLAG} OR CMAKE_CXX_FLAGS MATCHES ${UBSAN_FLAG})
+    set(CAFFE2_UBSAN_ENABLED ON)CACHE STRING "Selected BLAS library")
     set(CAFFE2_USE_EIGEN_FOR_BLAS ON)
     set(CAFFE2_USE_MKL OFF)
   endif()
@@ -293,12 +288,12 @@ endif()
 
 # ---[ Caffe2 uses cpuinfo library in the thread pool
 if (NOT TARGET cpuinfo)
-  if (NOT DEFINED CPUINFO_SOURCE_DIR)
-    set(CPUINFO_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../third_party/cpuinfo" CACHE STRING "cpuinfo source directory")
-  endif()
+  if (NOT DEFINED CPUg protobuf, so we need to disable it.
+set(UBSAN_FLAG "-fsanitize=undefined")
 
-  set(CPUINFO_BUILD_TOOLS OFF CACHE BOOL "")
-  set(CPUINFO_BUILD_UNIT_TESTS OFF CACHE BOOL "")
+macro(disable_ubsan)
+  if (CMAKE_C_FLAGS MATCHES ${UBSAN_FLAG} OR CMAKE_CXX_FLAGS MATCHES ${UBSAN_FLAG})
+    set(CAFFE2_UBSAN_ENABLED ON)IT_TESTS OFF CACHE BOOL "")
   set(CPUINFO_BUILD_MOCK_TESTS OFF CACHE BOOL "")
   set(CPUINFO_BUILD_BENCHMARKS OFF CACHE BOOL "")
   set(CPUINFO_LIBRARY_TYPE "static" CACHE STRING "")
