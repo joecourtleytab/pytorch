@@ -23,7 +23,7 @@ py::object to_py_obj(const Message& message) {
 
 std::shared_ptr<FutureMessage> py_rpc_builtin(
     RpcAgent& agent,
-    const std::string& dstName,
+    const WorkerId& dst,
     const std::string& opName,
     const py::args& args,
     const py::kwargs& kwargs) {
@@ -37,8 +37,7 @@ std::shared_ptr<FutureMessage> py_rpc_builtin(
         Stack stack = torch::jit::createStackForSchema(
             op->schema(), args, kwargs, c10::nullopt);
 
-        return agent.send(
-            dstName, ScriptCall(op, std::move(stack)).toMessage());
+        return agent.send(dst, ScriptCall(op, std::move(stack)).toMessage());
       } catch (std::runtime_error) {}
     }
   }
@@ -49,12 +48,12 @@ std::shared_ptr<FutureMessage> py_rpc_builtin(
 
 std::shared_ptr<FutureMessage> py_rpc_python_udf(
     RpcAgent& agent,
-    const std::string& dstName,
+    const WorkerId& dst,
     const std::string& pickledPythonUDF) {
   std::vector<char> data(pickledPythonUDF.begin(), pickledPythonUDF.end());
   std::vector<torch::Tensor> tensor_table;
 
-  return agent.send(dstName,
+  return agent.send(dst,
                     Message(std::move(data),
                             std::move(tensor_table),
                             MessageType::PYTHON_CALL));
