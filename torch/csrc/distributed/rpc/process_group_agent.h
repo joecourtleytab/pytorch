@@ -39,7 +39,6 @@ class ProcessGroupAgent : public RpcAgent {
  public:
 
   ProcessGroupAgent(std::string workerName,
-                    std::unordered_map<std::string, int> nameMap,
                     std::shared_ptr<c10d::ProcessGroup> pg,
                     int numSendRecvThreads = 4);
 
@@ -68,7 +67,7 @@ class ProcessGroupAgent : public RpcAgent {
   }
 
   // worker name -> rank
-  const std::unordered_map<std::string, int> nameMap_;
+  std::unordered_map<std::string, int> nameMap_;
   std::vector<WorkerId> workerIds_;
   bool stop_;
   std::shared_ptr<c10d::ProcessGroup> pg_;
