@@ -151,6 +151,11 @@ const WorkerId& ProcessGroupAgent::getWorkerId(const std::string& workerName) co
   return workerIds_[idIter->second];
 }
 
+const WorkerId& ProcessGroupAgent::getWorkerId(worker_id_t id) const {
+  return workerIds_[id];
+}
+
+
 void ProcessGroupAgent::join() {
   // Every process i sends a SHUTDOWN message to process i + 1. This is
   // necessary for now because:
@@ -189,7 +194,7 @@ std::shared_ptr<FutureMessage> ProcessGroupAgent::send(
 
   auto requestId = nextId();
   auto future = std::make_shared<FutureMessage>();
-  if (message.isRequest()) {
+  if (message.requiresResponse()) {
     {
       std::lock_guard<std::mutex> lock{futureMutex_};
       futures_[requestId] = future;

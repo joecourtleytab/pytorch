@@ -5,6 +5,9 @@
 #include <torch/csrc/distributed/rpc/process_group_agent.h>
 #include <torch/csrc/distributed/rpc/python_functions.h>
 #include <torch/csrc/distributed/rpc/rpc_agent.h>
+#include <torch/csrc/distributed/rpc/rref.h>
+#include <torch/csrc/distributed/rpc/rref_context.h>
+#include <torch/csrc/distributed/rpc/types.h>
 #include <torch/csrc/jit/pybind_utils.h>
 #include <torch/csrc/utils/object_ptr.h>
 #include <torch/csrc/utils/pybind.h>
@@ -32,6 +35,16 @@ PyObject* rpc_init(PyObject* /* unused */) {
   // RpcAgent implementations.
   auto workerId = shared_ptr_class_<WorkerId>(module, "WorkerId")
       .def_readonly("name", &WorkerId::name_);
+
+  auto rref = shared_ptr_class_<RRef>(module, "RRef")
+      .def("owner",
+           &RRef::owner,
+           py::call_guard<py::gil_scoped_release>())
+      .def("to_here",
+           [&](RRef& rref) {
+             return torch::jit::toPyObject(rref.toHere());
+           },
+           py::call_guard<py::gil_scoped_release>());
 
   auto rpcAgent = shared_ptr_class_<RpcAgent>(module, "RpcAgent")
       .def("join",
@@ -62,8 +75,16 @@ PyObject* rpc_init(PyObject* /* unused */) {
                &RpcAgent::getWorkerId,
                py::call_guard<py::gil_scoped_release>())
           .def("get_worker_id",
+               (const WorkerId& (ProcessGroupAgent::*)(void) const)
+                   &RpcAgent::getWorkerId,
+               py::call_guard<py::gil_scoped_release>())
+          .def("get_worker_id",
                (const WorkerId& (ProcessGroupAgent::*)(const std::string&) const)
-               &ProcessGroupAgent::getWorkerId,
+                   &ProcessGroupAgent::getWorkerId,
+               py::call_guard<py::gil_scoped_release>())
+          .def("get_worker_id",
+               (const WorkerId& (ProcessGroupAgent::*)(worker_id_t) const)
+                   &ProcessGroupAgent::getWorkerId,
                py::call_guard<py::gil_scoped_release>())
           .def("join",
                &ProcessGroupAgent::join,
@@ -71,6 +92,10 @@ PyObject* rpc_init(PyObject* /* unused */) {
           .def("sync",
                &ProcessGroupAgent::sync,
                py::call_guard<py::gil_scoped_release>());
+
+  module.def("init_rref_context", [](std::shared_ptr<RpcAgent> agent){
+    RRefContext::getInstance(agent);
+  });
 
   module.def("invoke_rpc_builtin", [](
       RpcAgent& agent,
@@ -80,6 +105,17 @@ PyObject* rpc_init(PyObject* /* unused */) {
       const py::kwargs& kwargs) {
     return py_rpc_builtin(agent, dst, opName, args, kwargs);
   });
+
+
+  module.def("invoke_remote_builtin", [](
+      RpcAgent& agent,
+      const WorkerId& dst,
+      const std::string& opName,
+      const py::args& args,
+      const py::kwargs& kwargs) {
+    return py_remote_builtin(agent, dst, opName, args, kwargs);
+  });
+
 
   module.def("invoke_rpc_python_udf", [](
       RpcAgent& agent,
